@@ -29,6 +29,12 @@ This fork adds **2025 Kia Carnival HEV (CCNC)** support to sunnypilot for the
    by `johnhihi` — adds `RADAR_TRACK_180`–`184` DBC messages and the `_update_canfd`
    radar parser for the Carnival's Mando MRR20 (0x180 ~50 Hz + 0x181 ~5 Hz), enabling
    lead detection for the future longitudinal path.
+5. **Full CCNC cluster UI:** the `create_ccnc` from sunnypilot's `ccnc-port` — the
+   "beautiful UI" CCNC feature set: fault-free dash, lane-change-assist (LCA) icons and
+   arrows, lane-line curvature + position animation, lane-departure steering-wheel
+   vibration (`VIBRATE`), blind-spot indicators, and the nav/SLA/target icons. Requires
+   the `FR_CMR_03_50ms` (msg_1b5) camera message; gracefully degrades to the basic
+   subset if that message is not present on the Carnival.
 
 ### Porting note: flag + scope fixes applied while folding in radar tracks
 

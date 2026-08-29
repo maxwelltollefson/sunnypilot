@@ -67,6 +67,7 @@ class CarState(CarStateBase, EsccCarStateBase, MadsCarState, CarStateExt):
 
     self.msg_161 = {}
     self.msg_162 = {}
+    self.msg_1b5 = {}
 
     # On some cars, CLU15->CF_Clu_VehicleSpeed can oscillate faster than the dash updates. Sample at 5 Hz
     self.cluster_speed = 0
@@ -273,6 +274,10 @@ class CarState(CarStateBase, EsccCarStateBase, MadsCarState, CarStateExt):
     if self.CP.flags & HyundaiFlags.CCNC and not self.CP.flags & HyundaiFlags.CANFD_LKA_STEER_MSG:
       self.msg_161 = copy.copy(cp_cam.vl["CCNC_0x161"])
       self.msg_162 = copy.copy(cp_cam.vl["CCNC_0x162"])
+      # FR_CMR_03_50ms (msg_1b5) carries lane-position + lead-distance for the full
+      # CCNC cluster UI (lane animation, lane-change assist, longitudinal HUD).
+      if "FR_CMR_03_50ms" in cp_cam.vl:
+        self.msg_1b5 = copy.copy(cp_cam.vl["FR_CMR_03_50ms"])
 
     # cruise state
     # CAN FD cars enable on main button press, set available if no TCS faults preventing engagement
@@ -341,6 +346,7 @@ class CarState(CarStateBase, EsccCarStateBase, MadsCarState, CarStateExt):
       cam_msgs += [
         ("CCNC_0x161", 20),
         ("CCNC_0x162", 20),
+        ("FR_CMR_03_50ms", 50),
       ]
     return {
       Bus.pt: CANParser(DBC[CP.carFingerprint][Bus.pt], msgs, CanBus(CP).ECAN),
