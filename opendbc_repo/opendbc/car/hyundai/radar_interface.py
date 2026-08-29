@@ -16,6 +16,8 @@ RADAR_MSG_COUNT = 32
 
 def get_radar_can_parser(CP):
   if CP.flags & HyundaiFlags.CANFD_RADAR:
+    # MRR20 tracks (0x180-0x184) live on A-CAN (bus 1) for LFA/camera-SCC CCNC cars
+    # like the Carnival HEV. Mirrors johnhihi's PR #351.
     messages = [(f"RADAR_TRACK_{addr:x}", 50) for addr in range(0x180, 0x185)]
     return CANParser(DBC[CP.carFingerprint][Bus.pt], messages, 1)
   if Bus.radar not in DBC[CP.carFingerprint]:
