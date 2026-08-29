@@ -271,6 +271,11 @@ def create_ccnc(packer, CAN, CP, CC, CS):
   msg_161 = CS.msg_161.copy()
   msg_162 = CS.msg_162.copy()
 
+  # Defensive: if the CCNC messages were not captured (e.g. an LKA-steering CCNC car),
+  # return early rather than emitting a message from an empty template.
+  if not msg_161 or not msg_162:
+    return ret
+
   enabled = CC.enabled
   hud = CC.hudControl
 
@@ -310,10 +315,14 @@ def create_ccnc(packer, CAN, CP, CC, CS):
   if CP.openpilotLongitudinalControl:
 
     # SETSPEED, DISTANCE
+    # Cap the set-speed display at 100 (kph-mph) and floor at 25 so the cluster
+    # shows a sane value instead of clamping to an arbitrary boundary value.
+    set_speed = round(CS.out.vCruiseCluster * (1 if CS.is_metric else CV.KPH_TO_MPH))
+    set_speed = int(min(max(set_speed, 25), 100))
     msg_161.update({
       "SETSPEED": 3 if enabled else 1,
       "SETSPEED_HUD": 2 if enabled else 1,
-      "SETSPEED_SPEED": 25 if (s := round(CS.out.vCruiseCluster * (1 if CS.is_metric else CV.KPH_TO_MPH))) > 100 else s,
+      "SETSPEED_SPEED": set_speed,
       "DISTANCE": hud.leadDistanceBars,
       "DISTANCE_SPACING": 1 if enabled else 0,
       "DISTANCE_LEAD": 2 if enabled and hud.leadVisible else 1 if enabled else 0,

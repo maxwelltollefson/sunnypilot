@@ -184,9 +184,15 @@ static bool hyundai_canfd_tx_hook(const CANPacket_t *msg) {
     }
   }
 
-  // cruise buttons check
-  if (msg->addr == 0x1cfU) {
-    int button = msg->data[2] & 0x7U;
+  // cruise buttons check (0x1CF for standard, 0x1AA for ALT_BUTTONS cars e.g. Carnival)
+  const unsigned int tx_button_addr = hyundai_canfd_alt_buttons ? 0x1aaU : 0x1cfU;
+  if (msg->addr == tx_button_addr) {
+    int button;
+    if (msg->addr == 0x1cfU) {
+      button = msg->data[2] & 0x7U;
+    } else {
+      button = (msg->data[4] >> 4) & 0x7U;
+    }
     bool is_cancel = (button == HYUNDAI_BTN_CANCEL);
     bool is_resume = (button == HYUNDAI_BTN_RESUME);
     bool is_set = (button == HYUNDAI_BTN_SET);
