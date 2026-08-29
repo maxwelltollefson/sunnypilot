@@ -1,5 +1,7 @@
+import copy
 import numpy as np
 from opendbc.car import CanBusBase
+from opendbc.car.common.conversions import Conversions as CV
 from opendbc.car.crc import CRC16_XMODEM
 from opendbc.car.hyundai.values import HyundaiFlags
 from opendbc.sunnypilot.car.hyundai.lead_data_ext import CanFdLeadData
@@ -74,14 +76,18 @@ def create_suppress_lfa(packer, CAN, lfa_block_msg, lka_steering_alt):
 
 
 def create_buttons(packer, CP, CAN, cnt, btn):
+  canfd_msg = "CRUISE_BUTTONS_ALT" if CP.flags & HyundaiFlags.CANFD_ALT_BUTTONS else "CRUISE_BUTTONS"
+  # If we discover cars use different values for this in the future, echoing back
+  # what's read from the car would also work.
+  SET_ME_2 = 6
   values = {
     "COUNTER": cnt,
-    "SET_ME_1": 1,
     "CRUISE_BUTTONS": btn,
-  }
+    "SET_ME_1": 1,
+  } | ({"SET_ME_2": SET_ME_2} if CP.flags & HyundaiFlags.CANFD_ALT_BUTTONS else {})
 
   bus = CAN.ECAN if CP.flags & HyundaiFlags.CANFD_LKA_STEER_MSG else CAN.CAM
-  return packer.make_can_msg("CRUISE_BUTTONS", bus, values)
+  return packer.make_can_msg(canfd_msg, bus, values)
 
 
 def create_acc_cancel(packer, CP, CAN, cruise_info_copy):
@@ -117,11 +123,17 @@ def create_acc_cancel(packer, CP, CAN, cruise_info_copy):
   return packer.make_can_msg("SCC_CONTROL", CAN.ECAN, values)
 
 
-def create_lfahda_cluster(packer, CAN, enabled, lfa_icon):
-  values = {
-    "HDA_ICON": 1 if enabled else 0,
-    "LFA_ICON": lfa_icon,
-  }
+def create_lfahda_cluster(packer, CAN, CP, enabled, lfa_icon):
+  if CP.flags & HyundaiFlags.CCNC:
+    values = {
+      "NEW_SIGNAL_5": 1,
+      "LFA_ICON": 2 if enabled else 0,
+    }
+  else:
+    values = {
+      "HDA_ICON": 1 if enabled else 0,
+      "LFA_ICON": lfa_icon,
+    }
   return packer.make_can_msg("LFAHDA_CLUSTER", CAN.ECAN, values)
 
 
@@ -187,7 +199,7 @@ def create_fca_warning_light(packer, CAN, frame):
       'SET_ME_2': 0x2,
       'SET_ME_FF': 0xff,
       'SET_ME_FC': 0xfc,
-      'SET_ME_9': 0x9,
+      'SET_ME_9': 0x1,  # CCNC: Carnival HEV ADAS ECU uses 0x1 (was 0x9 on prior HKG)
     }
     ret.append(packer.make_can_msg("ADRV_0x160", CAN.ECAN, values))
   return ret
@@ -207,7 +219,7 @@ def create_adrv_messages(packer, CAN, frame):
 
   if frame % 5 == 0:
     values = {
-      'SET_ME_1C': 0x1c,
+      'SET_ME_1C': 0x8,  # CCNC: Carnival HEV (was 0x1c on prior HKG)
       'SET_ME_FF': 0xff,
       'SET_ME_TMP_F': 0xf,
       'SET_ME_TMP_F_2': 0xf,
@@ -215,8 +227,8 @@ def create_adrv_messages(packer, CAN, frame):
     ret.append(packer.make_can_msg("ADRV_0x1ea", CAN.ECAN, values))
 
     values = {
-      'SET_ME_E1': 0xe1,
-      'SET_ME_3A': 0x3a,
+      'SET_ME_E1': 0x14,  # CCNC: Carnival HEV (was 0xe1 on prior HKG)
+      'SET_ME_3A': 0x80,  # CCNC: Carnival HEV (was 0x3a on prior HKG)
     }
     ret.append(packer.make_can_msg("ADRV_0x200", CAN.ECAN, values))
 
@@ -251,3 +263,71 @@ def hkg_can_fd_checksum(address: int, sig, d: bytearray) -> int:
   elif len(d) == 32:
     crc ^= 0x9F5B
   return crc
+
+
+def create_ccnc(packer, CAN, CP, CC, CS):
+  ret = []
+
+  msg_161 = CS.msg_161.copy()
+  msg_162 = CS.msg_162.copy()
+
+  enabled = CC.enabled
+  hud = CC.hudControl
+
+  # HIDE FAULTS
+  for f in ("FAULT_LSS", "FAULT_HDA", "FAULT_DAS"):
+    msg_162[f] = 0
+
+  # HIDE ALERTS
+  if msg_161.get("ALERTS_3") == 17:  # DRIVE_CAREFULLY
+    msg_161["ALERTS_3"] = 0
+
+  if msg_161.get("ALERTS_5") == 2:  # WATCH_FOR_SURROUNDING_VEHICLES
+    msg_161["ALERTS_5"] = 0
+
+  if msg_161.get("ALERTS_5") == 4:  # SMART_CRUISE_CONTROL_CONDITIONS_NOT_MET
+    msg_161["ALERTS_5"] = 0
+
+  if msg_161.get("ALERTS_5") == 5:  # USE_SWITCH_OR_PEDAL_TO_ACCELERATE
+    msg_161["ALERTS_5"] = 0
+
+  if msg_161.get("ALERTS_2") == 5:  # CONSIDER_TAKING_A_BREAK
+    msg_161.update({"ALERTS_2": 0, "SOUNDS_2": 0, "DAW_ICON": 0})
+
+  if msg_161.get("SOUNDS_4") == 2 and msg_161.get("LFA_ICON") in (3, 0,):  # LFA BEEPS
+    msg_161["SOUNDS_4"] = 0
+
+  # ICONS, LANELINES
+  msg_161.update({
+    "CENTERLINE": 1 if enabled else 0,
+    "LANELINE_LEFT": 2 if enabled else 0,
+    "LANELINE_RIGHT": 2 if enabled else 0,
+    "LFA_ICON": 2 if enabled else 0,
+    "LKA_ICON": 0,
+  })
+
+  # OP LONG
+  if CP.openpilotLongitudinalControl:
+
+    # SETSPEED, DISTANCE
+    msg_161.update({
+      "SETSPEED": 3 if enabled else 1,
+      "SETSPEED_HUD": 2 if enabled else 1,
+      "SETSPEED_SPEED": 25 if (s := round(CS.out.vCruiseCluster * (1 if CS.is_metric else CV.KPH_TO_MPH))) > 100 else s,
+      "DISTANCE": hud.leadDistanceBars,
+      "DISTANCE_SPACING": 1 if enabled else 0,
+      "DISTANCE_LEAD": 2 if enabled and hud.leadVisible else 1 if enabled else 0,
+      "DISTANCE_CAR": 2 if enabled else 1,
+      "ALERTS_3": hud.leadDistanceBars + 6,
+    })
+
+    # LEAD
+    msg_162.update({
+      "LEAD": 2 if enabled and hud.leadVisible else 1 if hud.leadVisible else 0,
+      "LEAD_DISTANCE": 150,
+    })
+
+  ret.append(packer.make_can_msg("CCNC_0x161", CAN.ECAN, msg_161))
+  ret.append(packer.make_can_msg("CCNC_0x162", CAN.ECAN, msg_162))
+
+  return ret
