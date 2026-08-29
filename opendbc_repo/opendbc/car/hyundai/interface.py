@@ -226,7 +226,10 @@ class CarInterface(CarInterfaceBase):
       if 0x53E in fingerprint[2]:
         ret.flags |= HyundaiFlagsSP.HAS_LKAS12.value
 
-    ret.intelligentCruiseButtonManagementAvailable = not (stock_cp.flags & HyundaiFlags.CANFD_ALT_BUTTONS)
+    # ICBM is now implemented for CAN-FD ALT_BUTTONS cars (0x1AA CRUISE_BUTTONS_ALT,
+    # 8-bit counter) — enabled for the Carnival HEV so ICBM + Speed Limit Assist work
+    # via simulated button presses against the stock ACC.
+    ret.intelligentCruiseButtonManagementAvailable = True
 
     return ret
 

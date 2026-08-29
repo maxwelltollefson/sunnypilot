@@ -47,8 +47,16 @@ class IntelligentCruiseButtonManagementInterface(IntelligentCruiseButtonManageme
   def create_canfd_mock_button_messages(self, packer, CS, CAN, send_button) -> list[CanData]:
     can_sends = []
     if self.CP.flags & HyundaiFlags.CANFD_ALT_BUTTONS:
-      # TODO: resume for alt button cars
-      pass
+      # ALT_BUTTONS cars (e.g. 2025-26 Kia Carnival) use the 0x1AA CRUISE_BUTTONS_ALT
+      # message with an 8-bit COUNTER. Cycle the counter the same way as the standard
+      # CAN-FD path, but note the counter width is 8 bits (not the 4-bit nibble of 0x1CF).
+      if (self.frame - self.last_button_frame) * DT_CTRL > 0.2:
+        self.button_frame += 1
+        button_counter_offset = [1, 1, 0, None][self.button_frame % 4]
+        if button_counter_offset is not None:
+          for _ in range(20):
+            can_sends.append(hyundaicanfd.create_buttons(packer, self.CP, CAN, (CS.buttons_counter + button_counter_offset) % 0x100, send_button))
+          self.last_button_frame = self.frame
     else:
       if (self.frame - self.last_button_frame) * DT_CTRL > 0.2:
         self.button_frame += 1
