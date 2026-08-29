@@ -72,6 +72,10 @@ class CarInterface(CarInterfaceBase):
         else:
           ret.flags |= HyundaiFlags.CANFD_ALT_GEARS.value
 
+      # CAN FD 0x180 - 0x184 carry radar track information (e.g. Carnival MRR20)
+      if 0x180 in fingerprint[CAN.ACAN]:
+        ret.flags |= HyundaiFlags.CANFD_RADAR.value
+
       cfgs = [get_safety_config(structs.CarParams.SafetyModel.hyundaiCanfd), ]
       if CAN.ECAN >= 4:
         cfgs.insert(0, get_safety_config(structs.CarParams.SafetyModel.noOutput))
@@ -132,7 +136,10 @@ class CarInterface(CarInterfaceBase):
 
     # Common longitudinal control setup
 
-    ret.radarUnavailable = RADAR_START_ADDR not in fingerprint[1] or Bus.radar not in DBC[ret.carFingerprint]
+    # CAN FD cars with radar tracks on 0x180-0x184 (e.g. Carnival MRR20) still have a usable radar,
+    # even without the classic RADAR_START_ADDR. Use the CANFD_RADAR flag set above instead of
+    # re-deriving the A-CAN here (avoids referencing `CAN` outside the CAN-FD branch).
+    ret.radarUnavailable = (RADAR_START_ADDR not in fingerprint[1] or Bus.radar not in DBC[ret.carFingerprint]) and not (ret.flags & HyundaiFlags.CANFD_RADAR)
     ret.openpilotLongitudinalControl = alpha_long and ret.alphaLongitudinalAvailable
     ret.pcmCruise = not ret.openpilotLongitudinalControl
     ret.startingState = True
