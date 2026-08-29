@@ -21,6 +21,20 @@ This fork adds **2025 Kia Carnival HEV (CCNC)** support to sunnypilot for the
 2. **CCNC integration:** only the CCNC pieces required by the Carnival HEV. The
    vehicle is `flags=HyundaiFlags.CCNC`, so the CCNC cluster messaging
    (`CCNC_0x161`/`0x162`) and the associated safety whitelist are part of the port.
+3. **BSM + `UNSUPPORTED_LONGITUDINAL`:** [`acidofrain/opendbc`](https://github.com/acidofrain/opendbc),
+   branch `kia-carnival-2026-sx` — the 2026 Carnival SX (ICE, HDA2) sibling port.
+   Two clean commits folded in: the `ADAS_CMD_50_50ms` BSM-subscription fix and the
+   honest `UNSUPPORTED_LONGITUDINAL` platform flag.
+
+## Deliberately excluded: LFA2 / angle steering
+
+The Carnival SX/SX-P HDA2 ECU reports `AciPluginSta = 0` — it does **not** support
+angle steering (LFA2). LFA2 was confirmed "not supported" on the 2026 Carnival SX HDA2
+by `acidofrain`'s reverse-engineering, and sunnypilot's `hkg-angle-steering-2025`
+branch targets a *different* platform group (Sorento/Ioniq/Santa Fe angle-steering
+variants). The Carnival HDA2 is a **torque-steering** car (`LKAS_ALT` 0x110, ADAS
+forwards as LFA). The ~2000-line LFA2 branch was therefore **not** folded in — it is
+inapplicable to this vehicle and would only add beta code surface with no benefit.
 
 ## What was ported (12 files, all in the vendored opendbc)
 

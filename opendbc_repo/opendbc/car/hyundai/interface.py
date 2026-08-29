@@ -47,9 +47,6 @@ class CarInterface(CarInterfaceBase):
         ret.alphaLongitudinalAvailable = False
 
       ret.enableBsm = 0x1ba in fingerprint[CAN.ECAN]
-      # TODO: BSM is not working correctly with the ADAS ECU disabled on the Carnival HEV.
-      if candidate == CAR.KIA_CARNIVAL_HEV_4TH_GEN:
-        ret.enableBsm = False
 
       # Check if the car is hybrid. Only HEV/PHEV cars have 0xFA on E-CAN.
       if 0xFA in fingerprint[CAN.ECAN]:

@@ -332,6 +332,11 @@ class CarState(CarStateBase, EsccCarStateBase, MadsCarState, CarStateExt):
         # this message is 50Hz but the ECU frequently stops transmitting for ~0.5s
         ("CRUISE_BUTTONS", 1)
       ]
+    if CP.enableBsm:
+      # BSM indicators are read from ADAS_CMD_50_50ms but the message was never
+      # subscribed, so leftBlindspot/rightBlindspot were never populated.
+      # (fix from acidofrain/kia-carnival-2026-sx)
+      msgs += [("ADAS_CMD_50_50ms", 50)]
     if CP.flags & HyundaiFlags.CCNC and not CP.flags & HyundaiFlags.CANFD_LKA_STEER_MSG:
       cam_msgs += [
         ("CCNC_0x161", 20),
