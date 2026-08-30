@@ -212,7 +212,10 @@ class CarInterface(CarInterfaceBase):
       stock_cp.dashcamOnly = True
 
     if stock_cp.flags & HyundaiFlags.CANFD:
-      if 0x1fa in fingerprint[CAN.ECAN]:
+      # Detect the camera ISLW/ISLA speed-limit message (0x1FA). On CCNC / camera-SCC
+      # cars (e.g. Carnival HEV) the camera sits on A-CAN, so check both buses rather
+      # than ECAN only, otherwise sign-reading silently falls back to map-only.
+      if 0x1fa in fingerprint[CAN.ECAN] or 0x1fa in fingerprint[CAN.ACAN]:
         ret.flags |= HyundaiFlagsSP.SPEED_LIMIT_AVAILABLE.value
     else:
       # Detect smartMDPS, which bypasses EPS low-speed lockout, allowing sunnypilot to send steering commands down to 0
