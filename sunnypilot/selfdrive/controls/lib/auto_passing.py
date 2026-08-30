@@ -16,6 +16,11 @@ from openpilot.common.params import Params
 
 LaneChangeDirection = log.LaneChangeDirection
 
+# Sentinel for "_direction_from_road": adjacent lane exists on BOTH sides (>=3 lanes),
+# so the caller picks the passing side via traffic convention. Distinct from `none`,
+# which means NO adjacent lane (or insufficient data) -> no suggestion.
+BOTH_LANES = -1
+
 # Slow-lead parameters (unvalidated defaults; conservative)
 SLOW_LEAD_SPEED_MARGIN = 0.15      # vEgo below cruiseState.speed * (1 - margin)
 SLOW_LEAD_MIN_TIME = 3.0           # seconds of sustained slow-lead before suggesting
@@ -44,7 +49,8 @@ class AutoPassingController:
     road_edge_stds : [left_edge_std, right_edge_std] — low std means a road edge is
                      confidently detected on that side (no lane beyond it).
 
-    Returns LaneChangeDirection.left/right/none.
+    Returns LaneChangeDirection.left/right, BOTH_LANES (lane on both sides),
+    or LaneChangeDirection.none (no adjacent lane / insufficient data).
     """
     if len(lane_line_probs) < 4:
       return LaneChangeDirection.none
@@ -61,7 +67,7 @@ class AutoPassingController:
 
     if lane_on_left and lane_on_right:
       # Lane on both sides (>=3 lanes) — handled by caller using traffic convention.
-      return LaneChangeDirection.none
+      return BOTH_LANES
     if lane_on_left:
       return LaneChangeDirection.left
     if lane_on_right:
@@ -93,9 +99,14 @@ class AutoPassingController:
 
     # 2. Direction heuristic.
     d = self._direction_from_road(lane_line_probs, road_edge_stds)
-    if d == LaneChangeDirection.none:
-      # Lane on both sides: use the passing side (left for LHD countries, right for RHD).
+    if d == BOTH_LANES:
+      # Lane on both sides (>=3 lanes): use the passing side (left for LHD, right for RHD).
       d = LaneChangeDirection.right if is_rhd else LaneChangeDirection.left
+    elif d == LaneChangeDirection.none:
+      # No adjacent lane (single-lane road / both edges present) or insufficient data:
+      # never suggest a lane change into a lane that doesn't exist.
+      self.suggest_direction = LaneChangeDirection.none
+      return LaneChangeDirection.none
 
     self.suggest_direction = d
     return d
