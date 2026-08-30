@@ -57,9 +57,11 @@ class CarControllerParams:
       self.STEER_MAX = 384
 
     # Carnival HEV has been observed to do ~10 Nm/sec stock. Conservatively double the CAN-FD deltas.
+    # CAN-FD base is STEER_DELTA_UP=2 / STEER_DELTA_DOWN=3; doubled => UP=4 / DOWN=6, and DOWN must
+    # stay >= UP so steering force can be shed faster than it is added (safety convention).
     if CP.carFingerprint in (CAR.KIA_CARNIVAL_HEV_4TH_GEN,):
-      self.STEER_DELTA_DOWN = 4
-      self.STEER_DELTA_UP = 6
+      self.STEER_DELTA_UP = 4
+      self.STEER_DELTA_DOWN = 6
 
 
 class HyundaiSafetyFlags(IntFlag):
