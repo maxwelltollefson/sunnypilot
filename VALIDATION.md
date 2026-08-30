@@ -66,6 +66,21 @@ would let the Auto-Passing Suggest feature go from *suggest* to *autonomous*.
 This is the one empirical capture that determines whether fully-autonomous overtake is
 possible — and it's the exact piece `pd0wm` (PR #24221) never finished on the EV6.
 
+## Drive 5 — DAW "take a break" suppression capture
+
+The car's own Driver Attention Warning pops "Consider Taking a Break" on the cluster
+because openpilot steering means the driver isn't moving the wheel. See
+`docs/DAW_suppression.md` for the full investigation.
+
+- [ ] Drive hands-off (openpilot steering) long enough for the **car's** "take a break"
+      cluster popup to appear (not openpilot's own alert — the dashboard one).
+- [ ] Record a preserved rlog of that moment.
+- [ ] In cabana, confirm the Carnival's DAW message/source (camera → cluster) and the
+      `DAW_WrnMsgSta` (`=1` "Rest Recommend") equivalent.
+- [ ] Identify which message openpilot re-sends that carries the DAW warning field, so we
+      can test forcing it to 0 while watching for high-beam / LKAS / DAW-settings regressions
+      (the known ECU-conflict side effect on the Palisade/Telluride platform).
+
 ## If something misbehaves
 
 | Symptom | Likely cause | Next step |
