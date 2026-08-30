@@ -46,15 +46,36 @@ This fork adds **2025 Kia Carnival HEV (CCNC)** support to sunnypilot for the
   which would crash classic-CAN Hyundai cars. Re-expressed using the `CANFD_RADAR`
   flag instead (which is only set in the CAN-FD branch).
 
-## Deliberately excluded: LFA2 / angle steering
+## Deliberately excluded: LFA2 angle-steering *branch* (but note the nuance)
 
-The Carnival SX/SX-P HDA2 ECU reports `AciPluginSta = 0` — it does **not** support
-angle steering (LFA2). LFA2 was confirmed "not supported" on the 2026 Carnival SX HDA2
-by `acidofrain`'s reverse-engineering, and sunnypilot's `hkg-angle-steering-2025`
-branch targets a *different* platform group (Sorento/Ioniq/Santa Fe angle-steering
-variants). The Carnival HDA2 is a **torque-steering** car (`LKAS_ALT` 0x110, ADAS
-forwards as LFA). The ~2000-line LFA2 branch was therefore **not** folded in — it is
-inapplicable to this vehicle and would only add beta code surface with no benefit.
+Two distinct things are often conflated, and it matters:
+
+1. **Steering request architecture (what this fork actually uses):** On CAN-FD HKG cars the
+   lateral command is an **angle request** — both `LKAS`/`LKAS_ALT` and `LFA` carry
+   `ADAS_StrAnglReqVal` (steering *angle* request, capped ~176.7° / 119.9°). The steering
+   **type/path** is decided at runtime by a bus-message check, not a hard-coded assumption:
+
+   ```
+   lka_steering = 0x50 in fingerprint[cam_can] or 0x110 in fingerprint[cam_can]
+   ```
+
+   - `0x50`/`0x110` present → `CANFD_LKA_STEER_MSG` (**HDA2 with ADAS ECU**): camera sends
+     LKA steering, ADAS DRV ECU forwards it as LFA to MDPS.
+   - absent → non-LKA (**HDA1**): camera sends LFA directly to MDPS.
+
+   The Carnival is an **HDA2 car** and is therefore expected to take the `CANFD_LKA_STEER_MSG`
+   path. There is no "torque-only vs angle-only" fundamental split in the message — the
+   earlier shorthand "torque-steered" was imprecise and has been corrected here.
+
+2. **The newer LFA2 "angle-steering" *platform group* (what `hkg-angle-steering-2025` is):**
+   `acidofrain` reported `AciPluginSta = 0` (no dedicated angle-control interface) on the
+   Carnival, placing it *outside* the Sorento/Ioniq/Santa Fe LFA2 angle-steering group. On
+   that specific basis, the ~2000-line `hkg-angle-steering-2025` branch was **not** folded in.
+
+**Open, verifiable-from-the-first-route:** whether the Carnival HEV's camera bus actually
+carries `0x50`/`0x110` (confirming `CANFD_LKA_STEER_MSG`), and whether `AciPluginSta=0`
+holds for the HEV trim (it was reported for the sibling ICE SX, not verified for the HEV).
+Both are fingerprint/rlog-verifiable and are queued in `VALIDATION.md`.
 
 ## What was ported (12 files, all in the vendored opendbc)
 

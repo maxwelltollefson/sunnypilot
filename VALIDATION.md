@@ -12,13 +12,18 @@ bottom; the highest-value checks are first.
       `Kia Carnival Hybrid 2025` / `Kia Carnival Hybrid (with HDA II) 2025` — *not* a
       generic "dashcam only" or a CAN/CABLING error. If it mis-identifies, stop and grab
       the fingerprint log before driving.
+- [ ] **Steering-path confirmation (settle torque-vs-angle definitively)**: in the rlog,
+      check whether `0x50`/`0x110` appears on the camera bus (→ `CANFD_LKA_STEER_MSG`, the
+      HDA2 ADAS-ECU path) and confirm the `AciPluginSta`/angle-control state the car
+      actually reports. This replaces `acidofrain`'s unverified "torque-steered" inference
+      with your own car's truth. See `PORTING.md`.
 - [ ] Enable **"Record and Upload Driver Camera"** + **route upload** so logs are
       preserved (see the sunnypilot "Share a Route" guide).
 
 ## Drive 1 — core connectivity & cluster (the essentials)
 
 - [ ] **Lateral / steering works** — engage LKA/LFA and confirm the car steers (this is
-      the torque-based `LKAS_ALT` 0x110 path; it should feel like stock HDA2 or better).
+      the `LKAS_ALT`/`LFA` angle-request path; it should feel like stock HDA2 or better).
 - [ ] **No boot errors / on-screen faults** — no "check cabling", "CAN signal" errors, no
       unexpected disengages. (`UNSUPPORTED_LONGITUDINAL` means longitudinal is hidden, so
       you should see *no* longitudinal options — that's expected, not a bug.)

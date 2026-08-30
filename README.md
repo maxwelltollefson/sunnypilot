@@ -26,8 +26,10 @@ sunnypilot release (`release-mici` = `v2026.002.002`).
 
 - **Longitudinal control** — marked `UNSUPPORTED_LONGITUDINAL` (unvalidated on this
   vehicle; plumbing is in place but disabled so the car boots clean with no errors).
-- **LFA2 / angle steering** — the Carnival SX/SX-P HDA2 ECU reports `AciPluginSta=0`
-  (no angle steering); this is a torque-steering car.
+- **LFA2 / angle-steering platform group** — the Carnival is an HDA2 (ADAS-ECU) car
+  whose steering path (`CANFD_LKA_STEER_MSG`, angle-request via `LKAS_ALT`/`LFA`) is
+  detected at runtime by bus message; the dedicated LFA2 angle-steering branch targets a
+  different platform group. See `PORTING.md` for the precise distinction.
 
 ## Install
 
