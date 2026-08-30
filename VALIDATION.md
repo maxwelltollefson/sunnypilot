@@ -36,6 +36,29 @@ bottom; the highest-value checks are first.
       actually steps down** (it'll be coarse, ~1 mph per ~0.2 s, stepping the stock ACC).
       This is the critical "does stock ACC latch synthetic 0x1AA presses?" question.
 
+### ICBM step-rate + SLA auto-set-validation (high value)
+
+The car's *native* HDA2 auto-sets speed on sign changes; openpilot replicates this via
+**Speed Limit Assist (policy) + ICBM (button actuator)** — both already wired to the
+`0x1FA` camera sign. The open question is whether ICBM's button cadence actually
+achieves the target promptly (vs. the car's "hold = 5 mph" native behavior).
+
+- [ ] **Rate check**: with ICBM active, time how long a sign change (e.g. 55→35) takes to
+      fully step the set-speed. If it's much slower than ~5 mph/s, ICBM is being throttled.
+- [ ] **Counter/latch check**: confirm the ECU accepts every `0x1AA` `res_accel`/`set_decel`
+      press. The ALT_BUTTONS counter-cycling pattern (`[1,1,0,None]` every 4th frame) may
+      not match what the Carnival's CCNC ECU expects, causing *rejected* presses and a
+      ~1 mph/s throttle (vs. the intended ~5 mph/s). A preserved rlog of the button frames
+      lets us diff ICBM's counter pattern against the car's native hold.
+- [ ] **SLA confirm**: verify Speed Limit Assist actually *sets* (not just suggests) the
+      new posted speed, using the `SpeedLimitOffset` (fixed/%) setting as the target.
+
+> This is the same root cause as the "hold button = 5 mph" native behavior: ICBM must
+> replicate auto-repeat, but its cadence + counter acceptance on the ALT_BUTTONS (0x1AA)
+> path is unvalidated. Fixing this makes both ICBM stepping *and* SLA sign-following fast
+> and reliable, matching native HDA2. (True *instant* set-speed change still needs real
+> longitudinal.)
+
 ## Drive 3 — longitudinal data capture (the big one)
 
 This is the single most valuable thing you can produce for yourself *and* the community
