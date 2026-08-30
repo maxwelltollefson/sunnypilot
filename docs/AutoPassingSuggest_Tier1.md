@@ -82,3 +82,57 @@ unchanged.**
 - Direction is road-edge-constrained (cannot suggest into a road edge).
 - Blind-spot / BCA / road-edge vetoes are unchanged.
 - Feature does not touch longitudinal; stock SCC continues to control speed.
+
+## Prior art: the HDA2 side radar has been decoded before (Tier 2 lead)
+
+The "rear-quadrant closing-vehicle" signal Tier 2 needs has **partially been decoded
+on sibling HDA2 platforms**. This is the concrete starting point for the route decode.
+
+### Mando corner-radar point cloud (EV6 / Ioniq 6 / Ioniq 5)
+
+- **Decoder source**: `opendbc/dbc/generator/hyundai/hyundai_kia_mando_corner_radar.py`
+  (already present in this fork's opendbc).
+- **Messages**: metadata `0x100`/`0x200`, radar **points** `0x101`/`0x201` at 20 Hz
+  (up to 65 points, 5 per message), checksum `0x104`/`0x204`.
+- **Per-point signals** (what we want for "is a car closing from behind"):
+  - `POINT_n_DISTANCE` (scale 1/64 m)
+  - `POINT_n_REL_VELOCITY` (scale 1/32 m/s, offset -66)  ← the closing-speed signal
+  - `POINT_n_AZIMUTH` (scale 1/512 rad)
+- **Author / status**: `pd0wm` (Willem Melching), comma.ai/openpilot PR #24221
+  ("EV6 corner radar", 2022). **Closed, never merged.** Left unfinished TODOs:
+  *"Find status flags, Find relative speed"* — the point cloud decoded but validity
+  flags incomplete. No production fork ships this parser.
+
+### ECU plumbing already in-tree
+
+- `Ecu.cornerRadar = 0x7b7` is already defined in `hyundai/values.py` `extra_ecus`
+  (so the corner-radar ECU is queried during fingerprinting on HKG).
+
+### Community BSM (presence-only) work
+
+- `whoisdomi` (FrogPilot Discord) got **blind-spot presence** working for the Ioniq 6 —
+  this is the `leftBlindspot`/`rightBlindspot` booleans, *not* the range/velocity
+  point cloud. Referenced in the sunnypilot "ESCC for CAN FD" forum thread.
+
+### Carnival (CCNC) caveat
+
+The Carnival HDA2 is a CCNC/CAN-FD car. `acidofrain`'s reverse-engineering shows its
+blind-spot data surfaces as **presence flags** via `ADAS_CMD_50_50ms`
+(`BCW_LtIndSta`/`BCW_RtIndSta`) — which is what this fork already reads. It is **not
+yet confirmed** whether the Carnival also transmits a Mando-style rear-lateral *point
+stream* (range + relative velocity) on `0x100/0x101` (or a CCNC-specific equivalent).
+
+### Tier 2 decode target (what to grep for in the route)
+
+When a full rlog is available, resolve these against the Carnival's actual traffic:
+
+1. Is there traffic on `0x100`/`0x200`/`0x101`/`0x201` (Mando corner-radar format)?
+2. If not, find the CCNC rear-lateral source: look for a message carrying a repeating
+   `DISTANCE`-like (~1/64 m) + `REL_VELOCITY`-like (~1/32 m/s) + `AZIMUTH`-like signal
+   triplet, likely 20 Hz, from the `0x7b7` corner-radar ECU.
+3. Confirm a per-point **validity/status** flag (the piece `pd0wm` never finished) so
+   tracks can be trusted for a "car closing in adjacent lane" gate.
+
+Once a source with range + relative velocity + validity is decoded, the
+`AutoPassingController` can drop the "suggest" downgrade and gate an autonomous pass on
+"no object closing from behind at > X m/s relative in the target lane".
