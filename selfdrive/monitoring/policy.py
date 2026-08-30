@@ -25,14 +25,9 @@ def to_percent(v):
 class DRIVER_MONITOR_SETTINGS:
   def __init__(self):
     # https://eur-lex.europa.eu/legal-content/EN/TXT/PDF/?uri=CELEX:42018X1947&rid=2
-    # Wheel-touch policy is the fallback when the driver camera cannot reliably detect
-    # a face (e.g. CCNC/minivan geometry). Its alert times were tuned for sedans; on the
-    # Carnival HEV intermittent face tracking dropped the car into wheeltouch mode and
-    # triggered spurious "take a break" alerts. Relaxed conservatively (~2x) to reduce
-    # false fatigue alerts while keeping the eventual safety escalation intact.
-    self._WHEELTOUCH_POLICY_ALERT_1_TIMEOUT = 30.
-    self._WHEELTOUCH_POLICY_ALERT_2_TIMEOUT = 48.
-    self._WHEELTOUCH_POLICY_ALERT_3_TIMEOUT = 60.
+    self._WHEELTOUCH_POLICY_ALERT_1_TIMEOUT = 15.
+    self._WHEELTOUCH_POLICY_ALERT_2_TIMEOUT = 24.
+    self._WHEELTOUCH_POLICY_ALERT_3_TIMEOUT = 30.
     # https://cdn.euroncap.com/cars/assets/euro_ncap_protocol_safe_driving_driver_engagement_v11_a30e874152.pdf
     self._VISION_POLICY_ALERT_1_TIMEOUT = 3.
     self._VISION_POLICY_ALERT_2_TIMEOUT = 5.
