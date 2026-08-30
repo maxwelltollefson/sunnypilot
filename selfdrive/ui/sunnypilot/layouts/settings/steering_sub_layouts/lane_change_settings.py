@@ -51,11 +51,19 @@ class LaneChangeSettingsLayout(Widget):
       description=lambda: tr("Toggle to enable a delay timer for seamless lane changes when blind spot monitoring " +
                              "(BSM) detects a obstructing vehicle, ensuring safe maneuvering."),
     )
+    self._auto_passing = toggle_item_sp(
+      param="AutoPassingSuggest",
+      title=lambda: tr("Auto Passing Suggest"),
+      description=lambda: tr("Suggest a lane change to the passing side when a slow vehicle ahead has slowed " +
+                             "you below your set speed. You still confirm with the turn signal to execute."),
+    )
 
     items = [
       self._lane_change_timer,
       LineSeparatorSP(40),
       self._bsm_delay,
+      LineSeparatorSP(40),
+      self._auto_passing,
     ]
 
     return items

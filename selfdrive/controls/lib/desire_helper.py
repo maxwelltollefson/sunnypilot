@@ -3,6 +3,7 @@ from openpilot.common.constants import CV
 from openpilot.common.realtime import DT_MDL
 from openpilot.sunnypilot.selfdrive.controls.lib.auto_lane_change import AutoLaneChangeController, AutoLaneChangeMode
 from openpilot.sunnypilot.selfdrive.controls.lib.lane_turn_desire import LaneTurnController
+from openpilot.sunnypilot.selfdrive.controls.lib.auto_passing import AutoPassingController
 
 LaneChangeState = log.LaneChangeState
 LaneChangeDirection = log.LaneChangeDirection
@@ -51,17 +52,35 @@ class DesireHelper:
     self.alc = AutoLaneChangeController(self)
     self.lane_turn_controller = LaneTurnController(self)
     self.lane_turn_direction = TurnDirection.none
+    self.auto_passing = AutoPassingController()
+    self.auto_passing_suggest = LaneChangeDirection.none
 
   @staticmethod
   def get_lane_change_direction(CS):
     return LaneChangeDirection.left if CS.leftBlinker else LaneChangeDirection.right
 
-  def update(self, carstate, lateral_active, lane_change_prob):
+  def update(self, carstate, lateral_active, lane_change_prob, model_v2=None, is_rhd=False):
     self.alc.update_params()
     self.lane_turn_controller.update_params()
     v_ego = carstate.vEgo
     one_blinker = carstate.leftBlinker != carstate.rightBlinker
     below_lane_change_speed = v_ego < LANE_CHANGE_SPEED_MIN
+
+    # Auto-Passing Suggest (Tier 1): compute a slow-lead lane-change suggestion.
+    # Only *pre-fills* the direction for the UI; execution still requires the blinker.
+    self.auto_passing.read_params()
+    self.auto_passing_suggest = LaneChangeDirection.none
+    if model_v2 is not None and self.auto_passing.enabled:
+      lead_prob = model_v2.leads[0].prob if len(model_v2.leads) else 0.0
+      self.auto_passing_suggest = self.auto_passing.update(
+        v_ego=v_ego,
+        cruise_speed=carstate.cruiseState.speed,
+        lead_prob=lead_prob,
+        lane_line_probs=list(model_v2.laneLineProbs),
+        road_edge_stds=list(model_v2.roadEdgeStds),
+        is_rhd=is_rhd,
+        lateral_active=lateral_active,
+      )
 
     # Lane turn controller update
     self.lane_turn_controller.update_lane_turn(blindspot_left=carstate.leftBlindspot, blindspot_right=carstate.rightBlindspot,
