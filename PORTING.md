@@ -67,10 +67,26 @@ Two distinct things are often conflated, and it matters:
    path. There is no "torque-only vs angle-only" fundamental split in the message — the
    earlier shorthand "torque-steered" was imprecise and has been corrected here.
 
-2. **The newer LFA2 "angle-steering" *platform group* (what `hkg-angle-steering-2025` is):**
-   `acidofrain` reported `AciPluginSta = 0` (no dedicated angle-control interface) on the
-   Carnival, placing it *outside* the Sorento/Ioniq/Santa Fe LFA2 angle-steering group. On
-   that specific basis, the ~2000-line `hkg-angle-steering-2025` branch was **not** folded in.
+2. **The dedicated angle-steering implementation (`hkg-angle-steering-2025`):**
+   There IS a mature, purpose-built angle-steering system for HKG cars — a whole branch
+   family (`hkg-angle-steering-2025-new-controls`, `-prebuilt`, `-tici`, etc.). It sets
+   `steerControlType = angle` for any car flagged `CANFD_ANGLE_STEERING`, backed by a full
+   tuning framework (`AngleSteeringLimits`, torque-reduction-gain for driver override,
+   `ANGLE_TORQUE_OVERRIDE_CYCLES`, speed-based smoothing matrix, etc.).
+
+   **However, the Carnival is NOT in the angle set** — in that branch `KIA_CARNIVAL_4TH_GEN`
+   carries `flags = RADAR_SCC` (no `CANFD_ANGLE_STEERING`), and there is **no Carnival HEV
+   entry at all**. The angle cars are IONIQ/Kona/Sportage/Sorento/Santa Fe etc. (This is
+   consistent with `acidofrain`'s `AciPluginSta = 0` report on the Carnival — the ADAS-ECU
+   / LFA-forwarded variant where angle-ready steering was never confirmed.)
+
+   So: angle steering is real and mature *in HKG generally*, but **not-yet-ported to the
+   Carnival** (ICE or HEV). Adopting it is not a "revert/fold-in" — it would mean porting
+   the `CANFD_ANGLE_STEERING` path + tuning framework to the Carnival HEV and validating
+   it, which is novel, unproven-on-this-trim work. Real-world testing on this user's car
+   showed both forks steering fine (both are torque-based), so torque is proven; angle is
+   the theoretically-better-but-unvalidated option, to be A/B-tested only after the
+   first-route fingerprint confirms steering readiness.
 
 **Open, verifiable-from-the-first-route:** whether the Carnival HEV's camera bus actually
 carries `0x50`/`0x110` (confirming `CANFD_LKA_STEER_MSG`), and whether `AciPluginSta=0`
