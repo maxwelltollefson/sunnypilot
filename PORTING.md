@@ -115,8 +115,13 @@ Both are fingerprint/rlog-verifiable and are queued in `VALIDATION.md`.
 The goal was a **clean, correct, compilable** result, not a byte-for-byte copy.
 Three latent bugs in the `ccdunder` source were corrected rather than propagated:
 
-1. **`values.py` steer-delta typo** — the source set `STEER_DELTA_DOWN` twice
-   (`= 4` then `= 6`). The second is clearly `STEER_DELTA_UP = 6`; fixed.
+1. **`values.py` steer-delta typo (double-`DOWN`) → FIXED as a transposition.** The
+   source set `STEER_DELTA_DOWN` twice (`= 4` then `= 6`). The correct resolution is
+   **not** "the second is `STEER_DELTA_UP`" — it is that the *intended* double of the
+   CAN-FD base (UP=2→4, DOWN=3→6) is `STEER_DELTA_UP = 4, STEER_DELTA_DOWN = 6`.
+   An earlier pass incorrectly set UP=6/DOWN=4, which inverted the HKG safety convention
+   (DOWN must be ≥ UP so steering force can be shed faster than it is added). Final fix
+   (`2cfd26099`) restores UP=4/DOWN=6.
 2. **`create_ccnc` duplicate message** — the source appended `CCNC_0x161` twice;
    the second must be `CCNC_0x162`. Fixed.
 3. **Undefined DBC signals** — the source referenced `SET_ME_A8`, `SET_ME_2C`,
