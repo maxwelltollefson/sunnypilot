@@ -31,6 +31,46 @@ All must hold for a short sustained window:
    pulled below the set speed by the lead — sustained for `SLOW_LEAD_TIME` seconds.
 5. Above `LANE_CHANGE_SPEED_MIN` (already the ALC floor).
 
+## Full edge-case matrix (hardened implementation)
+
+The controller applies these gates in order — a hard gate drops any active
+suggestion immediately; a soft gate simply prevents (re-)arming:
+
+| # | Condition | Type | Behavior |
+|---|---|---|---|
+| 1 | Feature disabled / lateral inactive / cruise speed invalid | Hard | No suggestion, clear state |
+| 2 | `vEgo < 20 mph` (lane-change speed floor) | Hard | No suggestion |
+| 3 | Either blinker on (driver already acting) | Hard | No suggestion, clear |
+| 4 | Lane change already in progress (`lane_change_state != off`) | Hard | No suggestion, clear |
+| 5 | Sharp curve ahead: model-predicted path curvature > 0.01 /m (~100 m radius) over the next 50 m | Hard | No suggestion, clear |
+| 6 | Lead lost briefly | Hold | Keep the armed suggestion for 1.5 s (anti-flap), frozen direction |
+| 7 | Lead present + below set speed for < 3 s | Soft | Don't arm yet (entry sustain) |
+| 8 | Insufficient lane-line data (`laneLineProbs` < 4 entries) | Soft | No suggestion |
+| 9 | Single-lane road (no adjacent lane) | Soft | Never suggest into a nonexistent lane |
+| 10 | Blind spot (BCA/BSM) on the target side | Soft | Drop suggestion instantly; re-arms immediately when clear (slow-lead timer keeps running) |
+| 11 | Lane on both sides (3+ lanes) | — | Passing side by traffic convention (`is_rhd`) |
+
+## Map data: evaluated and intentionally not used
+
+The user asked about map data without comma prime. `mapd` + offline OSM downloads
+**are** available without a subscription, but the `liveMapDataSP` schema in this fork
+carries only **speed limits + road name** — no road curvature and no road class
+(motorway/controlled-access). Those are the only fields that could meaningfully gate a
+lane change, so wiring mapd in would add a service dependency for zero gating value.
+
+The curve gate (#5) instead uses the **driving model's own predicted trajectory**
+(`modelV2.position`), which is a better signal anyway (it reflects the actual sensed
+road, not a stale map tile). If mapd later gains curvature/road-class fields, #5 can be
+augmented; see `docs/HKG_sibling_research.md`.
+
+## Surfacing (implemented)
+
+The suggestion is published on the sunnypilot-owned `ModelDataV2SP.autoPassingSuggest`
+(new `LaneChangeDirectionSP` enum: none/left/right) and surfaced as a soft,
+low-priority alert (`EventNameSP.autoPassingSuggest`, "Passing opportunity / Signal to
+change lanes", single low chime). The maneuver itself still executes only through the
+existing blinker → ALC path; the alert is informational.
+
 ## Direction heuristic (roadEdges + lane count)
 
 Given `roadEdges` (road-surface boundary) and `laneLineProbs` (left/right lane-line

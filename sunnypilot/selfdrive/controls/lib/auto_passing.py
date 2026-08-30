@@ -8,24 +8,45 @@ Tier 1 "Auto-Passing Suggest": detect a slow lead vehicle on a multi-lane road a
 pre-suggest a lane change toward the passing side. The maneuver still requires the
 driver's blinker to execute; this module only computes *when* to suggest and *which*
 direction via the driving model's road-edge + lane-line predictions.
+
+Edge-case handling (see docs/AutoPassingSuggest_Tier1.md):
+- Hard gates drop any active suggestion immediately: feature off, lateral inactive,
+  invalid cruise speed, below lane-change speed floor, any blinker on, an active
+  lane-change maneuver, or sharp path curvature ahead (from the model's own
+  predicted trajectory — no map data needed; mapd/OSM's liveMapDataSP schema carries
+  only speed limits + road names, not curvature or road class).
+- Slow-lead detection uses a 3s entry sustain + a 1.5s exit hold (anti-flap), and
+  freezes the suggestion during the hold so it cannot flip direction mid-hold.
+- Direction heuristic: road edge on a side forbids that direction; both sides open
+  -> passing side by traffic convention; no adjacent lane -> no suggestion.
+- Blind-spot veto: the target side must be free (BCA/BSM); a blind-spot appearance
+  drops the suggestion immediately, and it re-arms instantly once clear (the slow-lead
+  timer keeps running through suppression).
 """
 import time
 
+import numpy as np
 from cereal import log
+from openpilot.common.constants import CV
 from openpilot.common.params import Params
 
 LaneChangeDirection = log.LaneChangeDirection
+LaneChangeState = log.LaneChangeState
 
 # Sentinel for "_direction_from_road": adjacent lane exists on BOTH sides (>=3 lanes),
 # so the caller picks the passing side via traffic convention. Distinct from `none`,
 # which means NO adjacent lane (or insufficient data) -> no suggestion.
 BOTH_LANES = -1
 
-# Slow-lead parameters (unvalidated defaults; conservative)
+# Tunables (conservative, unvalidated defaults; see docs/AutoPassingSuggest_Tier1.md)
 SLOW_LEAD_SPEED_MARGIN = 0.15      # vEgo below cruiseState.speed * (1 - margin)
 SLOW_LEAD_MIN_TIME = 3.0           # seconds of sustained slow-lead before suggesting
+SLOW_LEAD_HOLD_TIME = 1.5          # seconds to hold an armed suggestion after lead clears
 LEAD_PROB_THRESHOLD = 0.5
 LANE_LINE_PROB_THRESHOLD = 0.5
+LANE_CHANGE_SPEED_MIN = 20 * CV.MPH_TO_MS
+MAX_PATH_CURVATURE = 0.01          # 1/m (~100 m radius) — suppress in curves
+PATH_LOOKAHEAD_X = 50.0            # meters of predicted path to check for curvature
 
 
 class AutoPassingController:
@@ -33,6 +54,7 @@ class AutoPassingController:
     self.params = Params()
     self.enabled = False
     self.slow_lead_start = None
+    self.slow_lead_cleared_at = None
     self.suggest_direction = LaneChangeDirection.none
     self._param_read_counter = 0
 
@@ -40,6 +62,11 @@ class AutoPassingController:
     if self._param_read_counter % 50 == 0:
       self.enabled = self.params.get_bool("AutoPassingSuggest")
     self._param_read_counter += 1
+
+  def _clear(self) -> None:
+    self.suggest_direction = LaneChangeDirection.none
+    self.slow_lead_start = None
+    self.slow_lead_cleared_at = None
 
   @staticmethod
   def _direction_from_road(lane_line_probs, road_edge_stds) -> int:
@@ -74,30 +101,80 @@ class AutoPassingController:
       return LaneChangeDirection.right
     return LaneChangeDirection.none
 
+  @staticmethod
+  def _max_path_curvature(path_x, path_y) -> float:
+    """Max |curvature| of the model's predicted ego path over the lookahead horizon.
+
+    Uses the driving model's own position prediction (no map dependency). Returns
+    inf when data is insufficient, which conservatively suppresses the suggestion.
+    """
+    if len(path_x) < 4 or len(path_y) < 4:
+      return float('inf')
+
+    xs = np.asarray(path_x, dtype=float)
+    ys = np.asarray(path_y, dtype=float)
+    order = np.argsort(xs)
+    xs, ys = xs[order], ys[order]
+
+    idx = np.where(xs <= PATH_LOOKAHEAD_X)[0]
+    if len(idx) < 4:
+      return float('inf')
+    xs, ys = xs[idx], ys[idx]
+
+    # light smoothing before differentiating (3-point moving average)
+    if len(ys) >= 3:
+      kernel = np.ones(3) / 3.0
+      ys = np.convolve(ys, kernel, mode='same')
+
+    dy = np.gradient(ys, xs)
+    ddy = np.gradient(dy, xs)
+    with np.errstate(divide='ignore', invalid='ignore'):
+      curv = np.abs(ddy) / np.power(1.0 + dy ** 2, 1.5)
+    curv = curv[np.isfinite(curv)]
+    return float(curv.max()) if len(curv) else float('inf')
+
   def update(self, v_ego, cruise_speed, lead_prob, lane_line_probs, road_edge_stds,
-             is_rhd: bool, lateral_active: bool) -> int:
+             is_rhd, lateral_active, left_blinker, right_blinker, lane_change_state,
+             left_blindspot, right_blindspot, path_x, path_y) -> int:
     """Returns a suggested LaneChangeDirection, or none.
 
-    All inputs are read-only; no side effects beyond internal state.
+    All inputs are read-only; the only side effect is internal suggestion state.
     """
-    if not self.enabled or not lateral_active or cruise_speed <= 0:
-      self.suggest_direction = LaneChangeDirection.none
+    # Hard gates: drop any active suggestion immediately.
+    if (not self.enabled or not lateral_active or cruise_speed <= 0 or
+        v_ego < LANE_CHANGE_SPEED_MIN or
+        left_blinker or right_blinker or
+        lane_change_state != LaneChangeState.off):
+      self._clear()
       return LaneChangeDirection.none
 
-    # 1. Slow-lead detection: lead present and we've been pulled below set speed.
+    # Curve gate: never suggest into/through a sharp curve (model-predicted path).
+    if self._max_path_curvature(path_x, path_y) > MAX_PATH_CURVATURE:
+      self._clear()
+      return LaneChangeDirection.none
+
+    # Slow-lead detection with entry sustain + exit hold (anti-flap hysteresis).
     slow_lead = lead_prob >= LEAD_PROB_THRESHOLD and v_ego < cruise_speed * (1 - SLOW_LEAD_SPEED_MARGIN)
 
-    if slow_lead and self.slow_lead_start is None:
-      self.slow_lead_start = time.monotonic()
-    elif not slow_lead:
+    if slow_lead:
+      self.slow_lead_cleared_at = None
+      if self.slow_lead_start is None:
+        self.slow_lead_start = time.monotonic()
+    else:
       self.slow_lead_start = None
+      if self.slow_lead_cleared_at is None:
+        self.slow_lead_cleared_at = time.monotonic()
+      if time.monotonic() - self.slow_lead_cleared_at > SLOW_LEAD_HOLD_TIME:
+        self._clear()
+        return LaneChangeDirection.none
+      # Inside the hold window: freeze the armed suggestion (may be none).
+      return self.suggest_direction
 
-    sustained = self.slow_lead_start is not None and (time.monotonic() - self.slow_lead_start) >= SLOW_LEAD_MIN_TIME
-    if not sustained:
-      self.suggest_direction = LaneChangeDirection.none
-      return LaneChangeDirection.none
+    # Entry sustain: require SLOW_LEAD_MIN_TIME before the first suggestion.
+    if time.monotonic() - self.slow_lead_start < SLOW_LEAD_MIN_TIME:
+      return self.suggest_direction
 
-    # 2. Direction heuristic.
+    # Direction heuristic.
     d = self._direction_from_road(lane_line_probs, road_edge_stds)
     if d == BOTH_LANES:
       # Lane on both sides (>=3 lanes): use the passing side (left for LHD, right for RHD).
@@ -105,6 +182,12 @@ class AutoPassingController:
     elif d == LaneChangeDirection.none:
       # No adjacent lane (single-lane road / both edges present) or insufficient data:
       # never suggest a lane change into a lane that doesn't exist.
+      self.suggest_direction = LaneChangeDirection.none
+      return LaneChangeDirection.none
+
+    # Blind-spot veto on the target side: suppress while occupied; re-arms when clear.
+    if ((d == LaneChangeDirection.left and left_blindspot) or
+        (d == LaneChangeDirection.right and right_blindspot)):
       self.suggest_direction = LaneChangeDirection.none
       return LaneChangeDirection.none
 

@@ -342,6 +342,13 @@ class SelfdriveD(CruiseHelper):
     elif lane_turn_direction == TurnDirection.turnRight:
       self.events_sp.add(custom.OnroadEventSP.EventName.laneTurnRight)
 
+    # Auto-Passing Suggest (Tier 1): surface the slow-lead lane-change suggestion
+    # computed in modeld as a soft, low-priority visual alert. The maneuver itself
+    # still requires the driver's blinker (existing ALC path).
+    auto_passing_suggest = self.sm['modelDataV2SP'].autoPassingSuggest
+    if auto_passing_suggest != custom.ModelDataV2SP.LaneChangeDirectionSP.none:
+      self.events_sp.add(custom.OnroadEventSP.EventName.autoPassingSuggest)
+
     for i, pandaState in enumerate(self.sm['pandaStates']):
       # All pandas must match the list of safetyConfigs, and if outside this list, must be silent or noOutput
       if i < len(self.CP.safetyConfigs):

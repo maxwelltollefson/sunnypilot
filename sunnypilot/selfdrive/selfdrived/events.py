@@ -243,4 +243,14 @@ EVENTS_SP: dict[int, dict[str, Alert | AlertCallbackType]] = {
       AlertStatus.normal, AlertSize.none,
       Priority.MID, VisualAlert.none, AudibleAlert.prompt, 3.),
   },
+
+  # Auto-Passing Suggest (Tier 1): soft hint that a passing lane change is available.
+  # Low priority + soft chime; the driver still executes via the blinker.
+  EventNameSP.autoPassingSuggest: {
+    ET.WARNING: Alert(
+      "Passing opportunity",
+      "Signal to change lanes",
+      AlertStatus.normal, AlertSize.small,
+      Priority.LOW, VisualAlert.none, AudibleAlertSP.promptSingleLow, 5.),
+  },
 }

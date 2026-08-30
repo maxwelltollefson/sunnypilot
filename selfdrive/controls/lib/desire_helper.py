@@ -80,6 +80,13 @@ class DesireHelper:
         road_edge_stds=list(model_v2.roadEdgeStds),
         is_rhd=is_rhd,
         lateral_active=lateral_active,
+        left_blinker=carstate.leftBlinker,
+        right_blinker=carstate.rightBlinker,
+        lane_change_state=self.lane_change_state,
+        left_blindspot=carstate.leftBlindspot,
+        right_blindspot=carstate.rightBlindspot,
+        path_x=list(model_v2.position.x),
+        path_y=list(model_v2.position.y),
       )
 
     # Lane turn controller update
