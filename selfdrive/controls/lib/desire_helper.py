@@ -72,6 +72,17 @@ class DesireHelper:
     self.auto_passing_suggest = LaneChangeDirection.none
     if model_v2 is not None and self.auto_passing.enabled:
       lead_prob = model_v2.leads[0].prob if len(model_v2.leads) else 0.0
+
+      desire_state = model_v2.meta.desireState
+      lane_change_left_prob = desire_state[log.Desire.laneChangeLeft] if len(desire_state) > log.Desire.laneChangeLeft else 0.0
+      lane_change_right_prob = desire_state[log.Desire.laneChangeRight] if len(desire_state) > log.Desire.laneChangeRight else 0.0
+
+      lane_lines = model_v2.laneLines
+      left_adj_x = list(lane_lines[0].x) if len(lane_lines) > 0 else []
+      left_adj_y = list(lane_lines[0].y) if len(lane_lines) > 0 else []
+      right_adj_x = list(lane_lines[3].x) if len(lane_lines) > 3 else []
+      right_adj_y = list(lane_lines[3].y) if len(lane_lines) > 3 else []
+
       self.auto_passing_suggest = self.auto_passing.update(
         v_ego=v_ego,
         cruise_speed=carstate.cruiseState.speed,
@@ -87,6 +98,12 @@ class DesireHelper:
         right_blindspot=carstate.rightBlindspot,
         path_x=list(model_v2.position.x),
         path_y=list(model_v2.position.y),
+        lane_change_left_prob=lane_change_left_prob,
+        lane_change_right_prob=lane_change_right_prob,
+        left_adj_x=left_adj_x,
+        left_adj_y=left_adj_y,
+        right_adj_x=right_adj_x,
+        right_adj_y=right_adj_y,
       )
 
     # Lane turn controller update

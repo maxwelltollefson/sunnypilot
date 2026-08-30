@@ -47,6 +47,9 @@ LANE_LINE_PROB_THRESHOLD = 0.5
 LANE_CHANGE_SPEED_MIN = 20 * CV.MPH_TO_MS
 MAX_PATH_CURVATURE = 0.01          # 1/m (~100 m radius) — suppress in curves
 PATH_LOOKAHEAD_X = 50.0            # meters of predicted path to check for curvature
+LANE_CHANGE_DESIRE_THRESHOLD = 0.2 # model's lane-change desire prob for the target side
+MAX_ADJ_LANE_DIVERGENCE = 2.0      # meters of lateral divergence over the lookahead
+DIVERGENCE_LOOKAHEAD_X = 40.0      # meters ahead to compare adjacent lane vs ego path
 
 
 class AutoPassingController:
@@ -121,11 +124,8 @@ class AutoPassingController:
       return float('inf')
     xs, ys = xs[idx], ys[idx]
 
-    # light smoothing before differentiating (3-point moving average)
-    if len(ys) >= 3:
-      kernel = np.ones(3) / 3.0
-      ys = np.convolve(ys, kernel, mode='same')
-
+    # The model's predicted path is already smooth; no additional filtering (edge
+    # padding in a smoothing kernel distorts the far samples and spikes curvature).
     dy = np.gradient(ys, xs)
     ddy = np.gradient(dy, xs)
     with np.errstate(divide='ignore', invalid='ignore'):
@@ -133,9 +133,45 @@ class AutoPassingController:
     curv = curv[np.isfinite(curv)]
     return float(curv.max()) if len(curv) else float('inf')
 
+  @staticmethod
+  def _lane_divergence(ego_x, ego_y, adj_x, adj_y) -> float:
+    """Lateral drift of an adjacent lane line relative to the ego path over the lookahead.
+
+    A turn lane, exit ramp, or merge lane diverges from the ego path; a parallel travel
+    lane does not. Returns inf when data is insufficient (conservatively suppresses).
+    """
+    if len(ego_x) < 4 or len(ego_y) < 4 or len(adj_x) < 4 or len(adj_y) < 4:
+      return float('inf')
+
+    ex = np.asarray(ego_x, dtype=float)
+    ey = np.asarray(ego_y, dtype=float)
+    ax = np.asarray(adj_x, dtype=float)
+    ay = np.asarray(adj_y, dtype=float)
+
+    # interp requires sorted x; model outputs should be monotonic but be safe
+    ex_order = np.argsort(ex)
+    ex, ey = ex[ex_order], ey[ex_order]
+    ax_order = np.argsort(ax)
+    ax, ay = ax[ax_order], ay[ax_order]
+
+    def y_at(xq, xs, ys):
+      if xs.size == 0 or xs[0] > xq or xs[-1] < xq:
+        return None
+      return float(np.interp(xq, xs, ys))
+
+    e0, e40 = y_at(0.0, ex, ey), y_at(DIVERGENCE_LOOKAHEAD_X, ex, ey)
+    a0, a40 = y_at(0.0, ax, ay), y_at(DIVERGENCE_LOOKAHEAD_X, ax, ay)
+    if None in (e0, e40, a0, a40):
+      return float('inf')
+
+    # divergence = how much the adjacent lane's lateral motion differs from ours
+    return abs((a40 - a0) - (e40 - e0))
+
   def update(self, v_ego, cruise_speed, lead_prob, lane_line_probs, road_edge_stds,
              is_rhd, lateral_active, left_blinker, right_blinker, lane_change_state,
-             left_blindspot, right_blindspot, path_x, path_y) -> int:
+             left_blindspot, right_blindspot, path_x, path_y,
+             lane_change_left_prob, lane_change_right_prob,
+             left_adj_x, left_adj_y, right_adj_x, right_adj_y) -> int:
     """Returns a suggested LaneChangeDirection, or none.
 
     All inputs are read-only; the only side effect is internal suggestion state.
@@ -188,6 +224,24 @@ class AutoPassingController:
     # Blind-spot veto on the target side: suppress while occupied; re-arms when clear.
     if ((d == LaneChangeDirection.left and left_blindspot) or
         (d == LaneChangeDirection.right and right_blindspot)):
+      self.suggest_direction = LaneChangeDirection.none
+      return LaneChangeDirection.none
+
+    # Model-desire gate: the driving model is trained on human lane-change behavior and
+    # keeps its desire probability low when a change into that lane is inappropriate
+    # (turn lanes, exit lanes, no-passing zones). Require it to endorse the direction.
+    desire_prob = lane_change_left_prob if d == LaneChangeDirection.left else lane_change_right_prob
+    if desire_prob < LANE_CHANGE_DESIRE_THRESHOLD:
+      self.suggest_direction = LaneChangeDirection.none
+      return LaneChangeDirection.none
+
+    # Divergence gate: a turn lane / exit ramp / merge lane diverges from our path; a
+    # parallel travel lane does not. Suppress when the target lane drifts away from us.
+    if d == LaneChangeDirection.left:
+      divergence = self._lane_divergence(path_x, path_y, left_adj_x, left_adj_y)
+    else:
+      divergence = self._lane_divergence(path_x, path_y, right_adj_x, right_adj_y)
+    if divergence > MAX_ADJ_LANE_DIVERGENCE:
       self.suggest_direction = LaneChangeDirection.none
       return LaneChangeDirection.none
 

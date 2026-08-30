@@ -49,6 +49,20 @@ suggestion immediately; a soft gate simply prevents (re-)arming:
 | 9 | Single-lane road (no adjacent lane) | Soft | Never suggest into a nonexistent lane |
 | 10 | Blind spot (BCA/BSM) on the target side | Soft | Drop suggestion instantly; re-arms immediately when clear (slow-lead timer keeps running) |
 | 11 | Lane on both sides (3+ lanes) | — | Passing side by traffic convention (`is_rhd`) |
+| 12 | **Turn lane / exit ramp / merge lane on the target side** — adjacent lane *diverges* from ego path (> 2 m lateral drift over 40 m) | Soft | Suppress; a real travel lane runs parallel |
+| 13 | **Model rejects the direction** — `desireState[laneChangeLeft/Right]` below 0.2 (model is trained on human behavior; low for turn lanes, exit lanes, no-passing zones) | Soft | Suppress; re-arms when the model endorses the change |
+
+### Why gates 12-13 catch the "turn lane" class of false positives
+
+On a 2-lane divided highway in the left lane, a left-turn lane opening creates a
+high `laneLineProbs[0]` and no left road edge yet — lane-existence alone would wrongly
+suggest left. Two independent signals catch it:
+- **Divergence (12):** the turn lane's lane line drifts away from the ego path within
+  the 40 m lookahead, unlike a parallel travel lane.
+- **Model desire (13):** the driving model (trained on human lane-change behavior) keeps
+  its lane-change probability low when that lane is a turn/exit lane. This also covers
+  no-passing zones and undertaking situations, and it is the same signal the existing
+  ALC already trusts to *complete* maneuvers.
 
 ## Map data: evaluated and intentionally not used
 
