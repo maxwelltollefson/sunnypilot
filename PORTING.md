@@ -163,3 +163,11 @@ Push this branch to a GitHub fork, then on the comma 4:
 (e.g. `https://github.com/<you>/sunnypilot` with branch
 `kia-carnival-2025-hev`), or use the install URL
 `installer.comma.ai/<your-username>/sunnypilot` pointing at this branch.
+
+## Flag-collision landmine (documented for future angle-steering work)
+
+`CCNC` and the angle-steering lineage's `CANFD_ANGLE_STEERING` both use the **same bits**
+(`HyundaiFlags 2**27` + `HyundaiSafetyFlags 1024`). A naive fold-in of angle steering would
+silently corrupt `CCNC`. Re-home one to a free bit first (this fork uses `2**28` for
+`CANFD_RADAR`; free bits include `2**23`, `2**26`, and ≥ `2**29`). Full detail in
+`docs/HKG_sibling_research.md`.
