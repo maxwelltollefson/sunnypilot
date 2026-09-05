@@ -36,7 +36,7 @@ sunnypilot release (`release-mici` = `v2026.002.002`).
 On the comma 4: **Settings → Software → Custom Software**, enter:
 
 ```
-installer.comma.ai/maxwelltollefson/sunnypilot
+installer.comma.ai/maxwelltollefson/openpilot
 ```
 
 then select branch `kia-carnival-2025-hev`.

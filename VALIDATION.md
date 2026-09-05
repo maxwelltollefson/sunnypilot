@@ -6,7 +6,7 @@ bottom; the highest-value checks are first.
 
 ## Before you drive
 
-- [ ] Install via `installer.comma.ai/maxwelltollefson/sunnypilot` → branch
+- [ ] Install via `installer.comma.ai/maxwelltollefson/openpilot` → branch
       `kia-carnival-2025-hev`.
 - [ ] Confirm the car **fingerprints correctly**: on the device, check it identifies as
       `Kia Carnival Hybrid 2025` / `Kia Carnival Hybrid (with HDA II) 2025` — *not* a
