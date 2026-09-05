@@ -59,10 +59,16 @@ class CarInterface(CarInterfaceBase):
           ret.flags |= HyundaiFlags.CANFD_LKA_STEER_MSG_ALT.value
       else:
         # no LKA steering
-        if 0x1cf not in fingerprint[CAN.ECAN]:
-          ret.flags |= HyundaiFlags.CANFD_ALT_BUTTONS.value
         if not ret.flags & HyundaiFlags.CANFD_RADAR_SCC:
           ret.flags |= HyundaiFlags.CANFD_CAMERA_SCC.value
+
+      # ALT_BUTTONS cars (e.g. Carnival) use the 0x1AA CRUISE_BUTTONS_ALT message.
+      # This check must run for ALL CAN-FD cars (LKA-steering included) — the
+      # Carnival HEV is LKA-steering (HDA2) AND uses alt buttons. Moving it inside
+      # the non-LKA branch (as a prior edit did) left LKA-steering alt-button cars
+      # subscribed to the absent 0x1CF CRUISE_BUTTONS -> canValid=false -> dashcam.
+      if 0x1cf not in fingerprint[CAN.ECAN]:
+        ret.flags |= HyundaiFlags.CANFD_ALT_BUTTONS.value
 
       # Some LKA steering cars have alternative messages for gear checks
       # ICE cars do not have 0x130; GEARS message on 0x40 or 0x70 instead
