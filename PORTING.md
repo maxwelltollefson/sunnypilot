@@ -25,26 +25,12 @@ This fork adds **2025 Kia Carnival HEV (CCNC)** support to sunnypilot for the
    branch `kia-carnival-2026-sx` — the 2026 Carnival SX (ICE, HDA2) sibling port.
    Two clean commits folded in: the `ADAS_CMD_50_50ms` BSM-subscription fix and the
    honest `UNSUPPORTED_LONGITUDINAL` platform flag.
-4. **CAN FD radar tracks (MRR20):** [`sunnypilot/opendbc` PR #351](https://github.com/sunnypilot/opendbc/pull/351)
-   by `johnhihi` — adds `RADAR_TRACK_180`–`184` DBC messages and the `_update_canfd`
-   radar parser for the Carnival's Mando MRR20 (0x180 ~50 Hz + 0x181 ~5 Hz), enabling
-   lead detection for the future longitudinal path.
-5. **Full CCNC cluster UI:** the `create_ccnc` from sunnypilot's `ccnc-port` — the
+3. **Full CCNC cluster UI:** the `create_ccnc` from sunnypilot's `ccnc-port` — the
    "beautiful UI" CCNC feature set: fault-free dash, lane-change-assist (LCA) icons and
    arrows, lane-line curvature + position animation, lane-departure steering-wheel
    vibration (`VIBRATE`), blind-spot indicators, and the nav/SLA/target icons. Requires
    the `FR_CMR_03_50ms` (msg_1b5) camera message; gracefully degrades to the basic
    subset if that message is not present on the Carnival.
-
-### Porting note: flag + scope fixes applied while folding in radar tracks
-
-- **`CANFD_RADAR` flag bit reassigned to `2**28`** — PR #351 used `2**27`, which
-  collides with `CCNC` on this release-mici base (PR #351 predates `CCNC` landing on
-  `2**27`). Avoided a subtle, hard-to-debug flag collision.
-- **Fixed a latent `CAN` NameError** — PR #351's `radarUnavailable` line referenced
-  `CAN.ACAN`, but `CAN` is only in scope inside the CAN-FD branch of `_get_params`,
-  which would crash classic-CAN Hyundai cars. Re-expressed using the `CANFD_RADAR`
-  flag instead (which is only set in the CAN-FD branch).
 
 ## Deliberately excluded: LFA2 angle-steering *branch* (but note the nuance)
 

@@ -159,10 +159,6 @@ class HyundaiFlags(IntFlag):
 
   CCNC = 2 ** 27
 
-  # CAN FD radar presents on bus 1 (A-CAN) at IDs 0x180 ~ 0x184 (e.g. Carnival MRR20).
-  # Uses bit 2**28 to avoid colliding with CCNC (2**27) which is taken in release-mici.
-  CANFD_RADAR = 2 ** 28
-
 
 @dataclass
 class HyundaiCarDocs(CarDocs):
