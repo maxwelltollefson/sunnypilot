@@ -28,7 +28,7 @@ import time
 import numpy as np
 from cereal import log
 from openpilot.common.constants import CV
-from openpilot.common.params import Params
+from openpilot.common.params import Params, UnknownKeyName
 
 LaneChangeDirection = log.LaneChangeDirection
 LaneChangeState = log.LaneChangeState
@@ -63,7 +63,14 @@ class AutoPassingController:
 
   def read_params(self) -> None:
     if self._param_read_counter % 50 == 0:
-      self.enabled = self.params.get_bool("AutoPassingSuggest")
+      try:
+        self.enabled = self.params.get_bool("AutoPassingSuggest")
+      except UnknownKeyName:
+        # The param registry (params_pyx) is a compiled prebuilt. If it predates
+        # the AutoPassingSuggest key (18b2ca5a1), the key is absent and get_bool
+        # raises. Never let a missing experimental-flag param crash modeld; the
+        # feature simply stays disabled until the prebuilt is regenerated.
+        self.enabled = False
     self._param_read_counter += 1
 
   def _clear(self) -> None:
